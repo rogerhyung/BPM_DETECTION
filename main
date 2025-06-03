@@ -1,0 +1,84 @@
+import os
+import time
+import numpy as np
+import pandas as pd
+import librosa
+
+from bpm_extractor_class3 import BPMExtractor
+
+# === Setup Paths === #
+PACK_DIR = "C:\\Users\\KU01\\Desktop\\ICTProject"
+MUSIC_DIR = os.path.join(PACK_DIR, "MUSIC")
+RESULT_DIR = os.path.join(PACK_DIR, "RESULT")
+
+# === Change to RESULT directory and load metadata === #
+os.chdir(RESULT_DIR)
+print(f"[INFO] Current directory: {os.getcwd()}")
+
+df = pd.read_csv('names.csv')
+print(df)
+
+true_bpm = df["BPM"]
+song_numbers = df["Number"]
+
+# === Change to MUSIC directory === #
+os.chdir(MUSIC_DIR)
+print(f"[INFO] Current directory: {os.getcwd()}")
+
+extractor = BPMExtractor()
+
+bpm_librosa = []
+time_librosa = []
+
+# === Librosa BPM Estimation === #
+for i in song_numbers:
+    idx = int(i) - 1
+    music_name = f"{int(i)}.mp3"
+
+    print(f"\n[PROCESSING] {df['Name'][idx]} (True BPM: {true_bpm[idx]})")
+
+    start = time.time()
+    y, sr = librosa.load(music_name)
+    tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+    end = time.time()
+
+    bpm_librosa.append(tempo)
+    time_librosa.append(end - start)
+
+# === Add Librosa Results to DataFrame === #
+df["BPM_librosa"] = bpm_librosa
+df["TIME_librosa"] = time_librosa
+
+# === Custom BPM Estimation Experiment with Different Cutoffs === #
+cutoff_values = [3.0, 4.0, 5.0, 6.0, 7.0, 9.0, 10.0]
+
+for cutoff in cutoff_values:
+    bpm_cutoff = []
+    time_cutoff = []
+
+    for i in song_numbers:
+        print("proccessing",cutoff,i,"\n")
+        music_name = f"{int(i)}.mp3"
+
+        start = time.time()
+        bpm = extractor.run_pipeline(
+            music_name,
+            method="moving_average",
+            cutoff=cutoff,
+            estimation_method='acf',
+            duration=40
+        )
+        end = time.time()
+
+        bpm_cutoff.append(bpm)
+        time_cutoff.append(end - start)
+
+    # Add result columns for this cutoff
+    col_bpm = f"BPM_{cutoff}"
+    col_time = f"TIME_{cutoff}"
+    df[col_bpm] = bpm_cutoff
+    df[col_time] = time_cutoff
+
+# === Save results === #
+df.to_csv("experiment_results.csv", index=False)
+print("\n✅ All results saved to 'experiment_results.csv'")
